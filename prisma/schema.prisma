@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * ===========================
+ * USER MODEL
+ * ===========================
+ */
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      UserRole @default(EMPLOYEE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  isActive    Boolean   @default(false)
+  invitedAt   DateTime?
+  activatedAt DateTime?
+
+  password String
+
+  // Relations
+  createdMeetings   Meeting[]
+  meetings          Meeting[]           @relation("MeetingParticipants")
+  concentrationData ConcentrationData[]
+  sentInvitations   Invitation[]        @relation("UserInvitations")
+  notifications     Notification[]
+
+  @@map("users")
+}
+
+/**
+ * ===========================
+ * INVITATION MODEL
+ * ===========================
+ */
+model Invitation {
+  id        String    @id @default(cuid())
+  email     String
+  token     String    @unique
+  role      UserRole  @default(EMPLOYEE)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  usedAt    DateTime? // Quand l'invitation est utilisée
+  invitedBy String
+
+  invitedByUser User @relation("UserInvitations", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@unique([email, token]) // Permet plusieurs invitations pour le même email
+  @@map("invitations")
+}
+
+/**
+ * ===========================
+ * MEETING MODEL
+ * ===========================
+ */
+model Meeting {
+  id                 String        @id @default(cuid())
+  title              String
+  description        String?
+  scheduledTime      DateTime
+  duration           Int
+  status             MeetingStatus @default(PLANNED)
+  createdById        String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  concentrationScore Int?
+  
+  // ========= CHAMPS IA =========
+  aiGeneratedMinutes String?      // Texte généré par IA
+  minutesGeneratedAt DateTime?    // Quand le PV IA a été généré
+  // =============================
+  
+  // Autres champs...
+  location           String?     
+  agenda             Json?        
+  decisions          Json?        
+  actionItems        Json?        
+  nextSteps          String[]     
+  
+  // Relations
+  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  participants  User[]         @relation("MeetingParticipants")
+  sessions      Session[]
+  notifications Notification[]
+
+  @@map("meetings")
+}
+
+
+
+
+
+/**
+ * ===========================
+ * SESSION MODEL
+ * ===========================
+ */
+model Session {
+  id                String              @id @default(cuid())
+  meetingId         String
+  startedAt         DateTime            @default(now())
+  endedAt           DateTime?
+  concentrationData ConcentrationData[]
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+/**
+ * ===========================
+ * CONCENTRATION DATA MODEL
+ * ===========================
+ */
+model ConcentrationData {
+  id               String   @id @default(cuid())
+  sessionId        String
+  timestamp        DateTime @default(now())
+  userId           String
+  attentionLevel   Int
+  presenceDetected Boolean
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@map("concentration_data")
+}
+
+/**
+ * ===========================
+ * ENUMS
+ * ===========================
+ */
+enum UserRole {
+  EMPLOYEE
+  ADMIN
+}
+
+enum MeetingStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/**
+ * ===========================
+ * NOTIFICATION MODEL
+ * ===========================
+ */
+model Notification {
+  id        String  @id @default(cuid())
+  userId    String
+  meetingId String?
+  type      String // MEETING_INVITATION, SYSTEM, REMINDER, etc.
+  title     String
+  message   String
+  isRead    Boolean @default(false)
+  metadata  Json?
+  priority  String? // Ajoutez ce champ si vous en avez besoin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meeting Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([meetingId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
